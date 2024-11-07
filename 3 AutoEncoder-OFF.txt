@@ -1,0 +1,80 @@
+# Import required packages
+import tensorflow as tf
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# Load and preprocess the data
+path = 'dataset/ecg-csv/ecg-csv/ecg.csv'
+df = pd.read_csv(path, header=None)
+
+# Drop column 140 if unnecessary
+df = df.drop(140, axis=1)
+
+# Scale the data
+scaler = StandardScaler()
+df = scaler.fit_transform(df)
+
+# Split the data into training and testing sets
+x_train, x_test = train_test_split(df, test_size=0.2, random_state=42)
+
+print(f"Training data shape: {x_train.shape}")
+print(f"Testing data shape: {x_test.shape}")
+
+# Define the encoder model
+encoder = tf.keras.Sequential([
+    tf.keras.layers.Input(shape=(x_train.shape[1],)),
+    tf.keras.layers.Dense(32, activation='relu'),
+    tf.keras.layers.Dense(16, activation='relu'),
+    tf.keras.layers.Dense(8, activation='relu')  # Latent space representation
+])
+
+# Define the decoder model
+decoder = tf.keras.Sequential([
+    tf.keras.layers.Input(shape=(8,)),
+    tf.keras.layers.Dense(16, activation='relu'),
+    tf.keras.layers.Dense(32, activation='relu'),
+    tf.keras.layers.Dense(x_train.shape[1], activation='linear')  # Reconstruct the original input
+])
+
+# Combine encoder and decoder to form the autoencoder model
+autoencoder = tf.keras.Sequential([encoder, decoder])
+
+# Compile the autoencoder
+autoencoder.compile(optimizer='adam', loss='mean_squared_error')
+
+# Train the autoencoder
+history = autoencoder.fit(
+    x_train, 
+    x_train,  # Target is the input itself for an autoencoder
+    validation_data=(x_test, x_test),
+    epochs=10,
+    batch_size=30,
+    shuffle=True
+)
+
+# Plot training history
+plt.plot(history.history["loss"], label="Train Loss")
+plt.plot(history.history["val_loss"], label="Validation Loss")
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.legend()
+plt.title("Training and Validation Loss over Epochs")
+plt.show()
+
+# Predict and calculate reconstruction error
+predictions = autoencoder.predict(x_test)
+mse = np.mean(np.power(x_test - predictions, 2), axis=1)
+
+# Define threshold for anomaly detection
+threshold = np.percentile(mse, 95)  # Adjust as needed
+print(f"Anomaly detection threshold: {threshold}")
+
+# Identify anomalies
+anomalies = mse > threshold
+num_anomalies = np.sum(anomalies)
+print(f"Number of Anomalies: {num_anomalies}")
