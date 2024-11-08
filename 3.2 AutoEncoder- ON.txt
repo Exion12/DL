@@ -1,0 +1,75 @@
+# Import required libraries
+import numpy as np  # Standard convention for numpy
+import pandas as pd
+import tensorflow as tf
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from tensorflow.keras import layers, models
+import matplotlib.pyplot as plt
+
+# b) Load and preprocess the dataset
+PATH_TO_DATA = 'http://storage.googleapis.com/download.tensorflow.org/data/ecg.csv'
+data = pd.read_csv(PATH_TO_DATA, header=None)
+
+
+# Standardize the data
+scaler = StandardScaler()
+X = scaler.fit_transform(data.values)
+y = X  # For autoencoder, X is both input and target output
+
+# Split the data into training and test sets
+X_train, X_test, _, _ = train_test_split(X, X, test_size=0.2, random_state=42)
+input_dim = X_train.shape[1]
+print("Input dimension:", input_dim)
+
+# c) Define the Encoder
+encoder = models.Sequential([
+    layers.Input(shape=(input_dim,)),
+    layers.Dense(32, activation="relu"),
+    layers.Dense(16, activation="relu"),
+    layers.Dense(8, activation="relu")  # Latent representation size = 8
+])
+
+
+# d) Define the Decoder
+decoder = models.Sequential([
+    layers.Input(shape=(8,)),
+    layers.Dense(16, activation="relu"),
+    layers.Dense(32, activation="relu"),
+    layers.Dense(input_dim, activation="linear")  # Output size matches input dimension
+])
+
+# Combine Encoder and Decoder into the Autoencoder model
+autoencoder = models.Sequential([encoder, decoder])
+
+# e) Compile the model
+autoencoder.compile(optimizer="adam", loss="mean_squared_error", metrics=["accuracy"])
+
+# Train the Autoencoder
+history = autoencoder.fit(X_train, X_train, epochs=10, batch_size=32, validation_split=0.2)
+
+
+# Plot training history for loss
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
+
+# Predict on the test set
+y_pred = autoencoder.predict(X_test)
+
+# Calculate Mean Squared Error (MSE) for each instance in the test set
+mse = np.mean(np.power(X_test - y_pred, 2), axis=1)
+
+# Determine the anomaly threshold at the 95th percentile of MSE values
+threshold = np.percentile(mse, 95)
+print("Anomaly detection threshold (95th percentile):", threshold)
+
+# Identify anomalies based on the threshold
+anomalies = mse > threshold
+
+# Count the number of anomalies
+num_anomalies = np.sum(anomalies)
+print(f"Number of anomalies detected: {num_anomalies}")
